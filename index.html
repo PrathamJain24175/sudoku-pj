@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#f7f8fa">
+<title>My Sudoku</title>
+<style>
+:root{--bg:#f7f8fa;--panel:#fff;--ink:#172033;--muted:#687386;--line:#d7dce5;--strong:#667085;--accent:#2463eb;--accent-soft:#e8efff;--fixed:#edf0f5;--wrong:#ffe6e6;--same:#e8efff;--selected:#cddcff;--good:#147d48}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+main{max-width:520px;margin:0 auto;padding:18px 14px 28px}
+header{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}h1{font-size:25px;letter-spacing:-.7px;margin:0} .subtitle{font-size:12px;color:var(--muted);margin-top:3px}
+.pill{border:1px solid var(--line);background:var(--panel);border-radius:999px;padding:7px 10px;font-size:12px;color:var(--muted)}
+.controls{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-bottom:12px}
+select,button{font:inherit}select,.action{border:1px solid var(--line);border-radius:12px;background:var(--panel);padding:10px 11px;color:var(--ink);min-height:42px}
+.action{cursor:pointer;font-weight:600}.primary{background:var(--accent);border-color:var(--accent);color:white}.toolbar{display:grid;grid-template-columns:repeat(4,1fr);gap:7px;margin:12px 0}
+.toolbar .action{font-size:12px;padding:9px 4px;min-height:40px}
+.status{display:flex;justify-content:space-between;gap:8px;color:var(--muted);font-size:13px;margin:10px 2px}
+.board{display:grid;grid-template-columns:repeat(9,1fr);aspect-ratio:1;background:#fff;border:2px solid #344054;border-radius:4px;overflow:hidden;touch-action:manipulation}
+.cell{display:flex;align-items:center;justify-content:center;min-width:0;border:0;border-right:1px solid var(--line);border-bottom:1px solid var(--line);background:#fff;color:#2454a6;font-size:clamp(17px,5.3vw,25px);padding:0;position:relative;cursor:pointer}
+.cell:nth-child(3n){border-right:2px solid #667085}.cell:nth-child(9n){border-right:0}.cell:nth-child(n+19):nth-child(-n+27),.cell:nth-child(n+46):nth-child(-n+54){border-bottom:2px solid #667085}.cell:nth-child(n+73){border-bottom:0}
+.cell.fixed{background:var(--fixed);color:#172033;font-weight:750}.cell.selected{background:var(--selected)!important;box-shadow:inset 0 0 0 2px var(--accent)}.cell.related{background:#f0f4fc}.cell.same{background:var(--same);color:#1746a2;font-weight:750}.cell.error{background:var(--wrong)!important;color:#b42318}.cell .notes{font-size:clamp(7px,2vw,10px);line-height:1.1;letter-spacing:0;color:#667085;position:absolute;inset:2px;display:grid;grid-template-columns:repeat(3,1fr);grid-template-rows:repeat(3,1fr);align-items:center;justify-items:center}
+.numbers{display:grid;grid-template-columns:repeat(9,1fr);gap:6px;margin-top:12px}.num{border:1px solid #cbd5e1;border-radius:10px;background:#fff;color:var(--accent);font-size:20px;font-weight:650;min-height:46px;cursor:pointer}.num:disabled{opacity:.35}
+.bottom{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px}.message{min-height:23px;text-align:center;color:var(--muted);font-size:13px;margin:9px 0 0}.message.good{color:var(--good);font-weight:650}
+.footer{font-size:11px;color:#8791a2;text-align:center;margin-top:17px;line-height:1.5}
+button:focus-visible,select:focus-visible{outline:3px solid #9db9ff;outline-offset:2px}
+@media(min-width:450px){main{padding-top:24px}.cell{font-size:25px}}
+</style>
+
+<meta name="description" content="A classic Sudoku puzzle game for personal offline play.">
+<link rel="manifest" href="./manifest.json">
+<link rel="icon" href="./icons/sudoku-192.png" type="image/png">
+<link rel="apple-touch-icon" href="./icons/sudoku-192.png">
+
+</head>
+<body>
+<main>
+<header><div><h1>My Sudoku</h1><div class="subtitle">A quiet little puzzle, just for you.</div></div><span class="pill" id="privacy">On this device</span></header>
+<div class="controls">
+<select id="difficulty" aria-label="Difficulty"><option value="easy">Easy</option><option value="medium" selected>Medium</option><option value="hard">Hard</option><option value="expert">Expert</option></select>
+<button class="action primary" id="newGame">New puzzle</button>
+</div>
+<div class="status"><span id="levelLabel">Medium puzzle</span><span>⏱ <strong id="timer">00:00</strong></span><span id="mistakes">Mistakes: 0</span></div>
+<div class="board" id="board" role="grid" aria-label="Sudoku board"></div>
+<div class="numbers" id="numbers" aria-label="Number pad"></div>
+<div class="toolbar">
+<button class="action" id="notesBtn" aria-pressed="false">✎ Notes: Off</button>
+<button class="action" id="hintBtn">☼ Hint</button>
+<button class="action" id="eraseBtn">⌫ Erase</button>
+<button class="action" id="checkBtn">✓ Check</button>
+</div>
+<div class="bottom">
+<button class="action" id="undoBtn">↶ Undo</button>
+<button class="action" id="restartBtn">↻ Restart</button>
+</div>
+<p class="message" id="message" aria-live="polite">Choose a cell, then tap a number.</p>
+<div class="footer">Your game progress is saved locally in this browser. No account required.</div>
+</main>
+<script>
+(() => {
+const $ = id => document.getElementById(id);
+const boardEl=$('board'), numbersEl=$('numbers');
+let puzzle=[], solution=[], values=[], fixed=[], notes=[], selected=-1, noteMode=false, mistakes=0, seconds=0, timerId=null, history=[], gameOver=false;
+const key='my-private-sudoku-v1';
+const shuffle=a=>{a=a.slice();for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]]}return a};
+function pattern(r,c){return (r*3+Math.floor(r/3)+c)%9}
+function makeSolution(){
+ const bands=shuffle([0,1,2]), rows=bands.flatMap(b=>shuffle([0,1,2]).map(r=>b*3+r));
+ const stacks=shuffle([0,1,2]), cols=stacks.flatMap(s=>shuffle([0,1,2]).map(c=>s*3+c));
+ const nums=shuffle([1,2,3,4,5,6,7,8,9]);
+ return rows.flatMap(r=>cols.map(c=>nums[pattern(r,c)]));
+}
+function candidates(grid,i){const r=Math.floor(i/9),c=i%9,s=new Set();for(let k=0;k<9;k++){s.add(grid[r*9+k]);s.add(grid[k*9+c]);s.add(grid[Math.floor(r/3)*27+Math.floor(c/3)*3+(Math.floor(k/3)*9)+(k%3)]);}s.delete(0);return [1,2,3,4,5,6,7,8,9].filter(n=>!s.has(n))}
+function countSolutions(grid,limit=2){
+ let count=0;
+ function solve(){if(count>=limit)return;let best=-1,opts=null;
+  for(let i=0;i<81;i++)if(!grid[i]){const c=candidates(grid,i);if(!opts||c.length<opts.length){best=i;opts=c;if(c.length<=1)break}}
+  if(best<0){count++;return} if(!opts.length)return;
+  for(const n of opts){grid[best]=n;solve();grid[best]=0;if(count>=limit)return}
+ }
+ solve();return count;
+}
+function generatePuzzle(level){
+ const sol=makeSolution();const p=sol.slice();
+ const targets={easy:38,medium:30,hard:25,expert:22}; // target number of clues
+ const target=targets[level]||30;
+ const order=shuffle([...Array(81)].map((_,i)=>i));
+ let clues=81;
+ for(const i of order){if(clues<=target)break;const old=p[i];p[i]=0;if(countSolutions(p.slice(),2)!==1)p[i]=old;else clues--;}
+ return {p,sol};
+}
+function save(){try{localStorage.setItem(key,JSON.stringify({puzzle,solution,values,fixed,notes,selected,noteMode,mistakes,seconds,level:$('difficulty').value,history,gameOver}))}catch(e){}}
+function load(){try{const d=JSON.parse(localStorage.getItem(key)||'null');if(d&&d.values?.length===81){({puzzle,solution,values,fixed,notes,selected,noteMode,mistakes,seconds,history,gameOver}=d);$('difficulty').value=d.level||'medium';return true}}catch(e){}return false}
+function fmtTime(s){return String(Math.floor(s/60)).padStart(2,'0')+':'+String(s%60).padStart(2,'0')}
+function startTimer(){clearInterval(timerId);timerId=setInterval(()=>{if(!gameOver){seconds++;$('timer').textContent=fmtTime(seconds);save()}},1000)}
+function say(t,good=false){$('message').textContent=t;$('message').className='message'+(good?' good':'')}
+function newGame(){const level=$('difficulty').value;const {p,sol}=generatePuzzle(level);puzzle=p;solution=sol;values=p.slice();fixed=p.map(v=>v!==0);notes=Array.from({length:81},()=>[]);selected=-1;noteMode=false;mistakes=0;seconds=0;history=[];gameOver=false;$('notesBtn').textContent='✎ Notes: Off';$('notesBtn').setAttribute('aria-pressed','false');$('timer').textContent='00:00';$('mistakes').textContent='Mistakes: 0';$('levelLabel').textContent=level[0].toUpperCase()+level.slice(1)+' puzzle';say('New puzzle ready. Good luck!');render();save();startTimer()}
+function render(){boardEl.innerHTML='';const selectedVal=selected>=0?values[selected]:0;
+ for(let i=0;i<81;i++){const b=document.createElement('button');b.className='cell';b.type='button';b.setAttribute('role','gridcell');b.setAttribute('aria-label',`Row ${Math.floor(i/9)+1}, column ${i%9+1}, ${values[i]||'empty'}`);if(fixed[i])b.classList.add('fixed');
+  if(selected>=0){const sr=Math.floor(selected/9),sc=selected%9,r=Math.floor(i/9),c=i%9;if(r===sr||c===sc||(Math.floor(r/3)===Math.floor(sr/3)&&Math.floor(c/3)===Math.floor(sc/3)))b.classList.add('related');if(i===selected)b.classList.add('selected');if(selectedVal&&values[i]===selectedVal)b.classList.add('same')}
+  if(values[i]){b.textContent=values[i];if(!fixed[i]&&values[i]!==solution[i])b.classList.add('error')}else if(notes[i]?.length){const n=document.createElement('span');n.className='notes';for(let k=1;k<=9;k++){const s=document.createElement('span');s.textContent=notes[i].includes(k)?k:'';n.appendChild(s)}b.appendChild(n)}
+  b.addEventListener('click',()=>{selected=i;render()});boardEl.appendChild(b);
+ }
+ numbersEl.innerHTML='';for(let n=1;n<=9;n++){const b=document.createElement('button');b.className='num';b.textContent=n;b.type='button';b.addEventListener('click',()=>enter(n));numbersEl.appendChild(b)}
+ $('mistakes').textContent='Mistakes: '+mistakes;$('timer').textContent=fmtTime(seconds);
+}
+function enter(n){if(selected<0){say('Choose an empty cell first.');return}if(fixed[selected]||gameOver)return;history.push({values:values.slice(),notes:notes.map(a=>a.slice()),mistakes});if(noteMode){notes[selected]=notes[selected].includes(n)?notes[selected].filter(x=>x!==n):[...notes[selected],n].sort();}else{values[selected]=n;notes[selected]=[];if(n!==solution[selected]){mistakes++;say('Not quite — try another number.')}else{say('Good move!');if(values.every((v,i)=>v===solution[i])){gameOver=true;clearInterval(timerId);say('Puzzle solved! Excellent work. 🎉',true)}}}render();save()}
+function erase(){if(selected<0||fixed[selected]||gameOver)return;history.push({values:values.slice(),notes:notes.map(a=>a.slice()),mistakes});values[selected]=0;notes[selected]=[];render();save();say('Cell cleared.')}
+function hint(){if(selected<0){say('Choose a cell for a hint.');return}if(fixed[selected]||gameOver){say('Choose an empty cell for a hint.');return}history.push({values:values.slice(),notes:notes.map(a=>a.slice()),mistakes});values[selected]=solution[selected];notes[selected]=[];say('Hint added. Keep going!');if(values.every((v,i)=>v===solution[i])){gameOver=true;clearInterval(timerId);say('Puzzle solved! Excellent work. 🎉',true)}render();save()}
+function check(){let conflicts=0,empty=0;for(let i=0;i<81;i++){if(!values[i])empty++;else if(values[i]!==solution[i])conflicts++}if(conflicts)say(`${conflicts} filled cell(s) need another look.`);else if(empty)say(`So far, so good — ${empty} cell(s) left.`,true);else{gameOver=true;clearInterval(timerId);say('Puzzle solved! Excellent work. 🎉',true)}}
+function undo(){const h=history.pop();if(!h){say('Nothing to undo yet.');return}values=h.values;notes=h.notes;mistakes=h.mistakes;gameOver=false;render();save();startTimer();say('Last move undone.')}
+$('newGame').addEventListener('click',newGame);$('difficulty').addEventListener('change',()=>{newGame()});
+$('notesBtn').addEventListener('click',()=>{noteMode=!noteMode;$('notesBtn').textContent='✎ Notes: '+(noteMode?'On':'Off');$('notesBtn').setAttribute('aria-pressed',String(noteMode));say(noteMode?'Pencil notes enabled.':'Pencil notes disabled.')});
+$('hintBtn').addEventListener('click',hint);$('eraseBtn').addEventListener('click',erase);$('checkBtn').addEventListener('click',check);$('undoBtn').addEventListener('click',undo);
+$('restartBtn').addEventListener('click',()=>{if(!confirm('Restart this puzzle and clear your entries?'))return;values=puzzle.slice();notes=Array.from({length:81},()=>[]);selected=-1;mistakes=0;seconds=0;gameOver=false;history=[];render();save();startTimer();say('Puzzle restarted.')});
+document.addEventListener('keydown',e=>{if(/^[1-9]$/.test(e.key))enter(Number(e.key));else if(e.key==='Backspace'||e.key==='Delete')erase();else if(e.key.startsWith('Arrow')&&selected>=0){e.preventDefault();let i=selected;if(e.key==='ArrowLeft')i=Math.max(0,i-1);if(e.key==='ArrowRight')i=Math.min(80,i+1);if(e.key==='ArrowUp')i=Math.max(0,i-9);if(e.key==='ArrowDown')i=Math.min(80,i+9);selected=i;render()}});
+if(!load())newGame();else{render();startTimer();say('Welcome back — your game was restored.')}
+})();
+</script>
+
+<script>
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("./service-worker.js").catch((error) => {
+      console.warn("Offline support could not be enabled:", error);
+    });
+  });
+}
+</script>
+
+</body>
+</html>
